@@ -1,0 +1,125 @@
+<canvas id="c" style="border: 1px solid red"></canvas>
+<script>
+var c = document.getElementById('c');
+var ctx = c.getContext('2d');
+
+var ep = 10;
+var dw = 5*ep;
+c.width = (dw+ep)*12;
+c.height = 7*ep;
+
+function display(seq, ofs=0) {
+	ctx.fillStyle = 'white';
+	ctx.fillRect(0, 0, c.width, c.height);
+	set = x => ctx.fillStyle = x ? 'black' : 'lightgrey';
+	seq.forEach(x => {
+		const G = x & 1;
+		const F = x & 2;
+		const E = x & 4;
+		const D = x & 8;
+		const C = x & 16;
+		const B = x & 32;
+		const A = x & 64;
+		const DP = x & 128;
+		ctx.beginPath();
+		set(A); ctx.fillRect(ofs+ep, 0, dw-2*ep, ep);
+		set(G); ctx.fillRect(ofs+ep, 3*ep, dw-2*ep, ep);
+		set(D); ctx.fillRect(ofs+ep, 6*ep, dw-2*ep, ep);
+		set(B); ctx.fillRect(ofs+dw-ep, ep, ep, 2*ep);
+		set(C); ctx.fillRect(ofs+dw-ep, 4*ep, ep, 2*ep);
+		set(F); ctx.fillRect(ofs, ep, ep, 2*ep);
+		set(E); ctx.fillRect(ofs, 4*ep, ep, 2*ep);
+		set(DP);
+		ctx.arc(ofs+dw+ep/2, c.height-ep/2, ep/3, 0, 2 * Math.PI, false);
+		ctx.fill();
+		ofs += dw + ep;
+	});
+	return false;
+}
+function parseIntSeq(x) {
+	return x.split(',').map(x => +x);
+}
+function dcsToMax(x) {
+	return (x & 128) | (x & 96) >> 4 | (x & 30) << 2 | (x & 1);
+}
+const indicationSeparator = '-----------------------------------------';
+function parseAndDecode(prefix, lines) {
+	var d = [0, 0, 0, 0, 0, 0];
+	lines.reduce((st, l) => {
+		if (st[0]=='-' && (l=='' || l==indicationSeparator))
+			return ['var'];
+		else if (st[0]=='var') {
+			if (l.startsWith(prefix))
+				return ['data', +l.charAt(10)];
+			else
+				return ['skip'];
+		}
+		else if (st[0]=='data') {
+			for (j=0; j<d.length; j++)
+				d[j] |= (l.charAt(j) > ' ') << (6 - st[1]);
+			return ['-'];
+		}
+		else if (st[0]=='skip')
+			return ['-'];
+		else
+			console.warn(st, l);
+	}, ['-', null]);
+	return d.map(dcsToMax);
+}
+function old(raw) {
+	const lines = raw.split('\n');
+	const l = parseAndDecode('PCN_UL_SEG', lines);
+	const r = parseAndDecode('PCN_UR_SEG', lines);
+	display(l.concat(r));
+	return false;
+}
+function parseIndication(raw) {
+	var o = {};
+	raw.split('\n').reduce((st, l) => {
+		if (st[0]=='-' && (l=='' || l==indicationSeparator))
+			return ['var'];
+		else if (st[0]=='var')
+			return ['data', l];
+		else if (st[0]=='data') {
+			o[st[1]] = l;
+			return ['-'];
+		}
+		else
+			console.warn(st, l);
+	}, ['-', null]);
+	return o;
+}
+function decode(o) {
+	var ul = [0, 0, 0, 0, 0, 0];
+	var ur = [0, 0, 0, 0, 0, 0];
+	for (const [k, v] of Object.entries(o)) {
+		var s = null; //segment
+		var d = null; //display
+		var a = 0; //right alignment offset
+		if (k.startsWith('PCN_UL_SEG')) {
+			d = ul;
+			s = +k.charAt(10);
+			a = 5 - v.length;
+		}
+		else if (k.startsWith('PCN_UR_SEG')) {
+			d = ur;
+			s = +k.charAt(10);
+			a = 6 - v.length;
+		}
+		else
+			continue;
+		for (j=0; j<v.length; j++)
+			d[a+j] |= (v.charAt(j) > ' ') << (s==7 ? 7 : 6 - s)
+	}
+	console.log(ul, ur);
+	return ul.concat(ur).map(dcsToMax); //TODO return separate values
+}
+function f(raw) {
+	display(decode(parseIndication(raw)));
+	return false;
+}
+</script>
+<form method="post" onsubmit="return f(this.indication.value)">
+<textarea name="indication" cols="50" rows="20"></textarea>
+<button>Display</button>
+</form>
